@@ -1,0 +1,406 @@
+---
+title: "AUD retention - expanded dataset"
+author: "Alex Hughes"
+format: html
+---
+
+```{r message = FALSE, warning = FALSE}
+library(dplyr)
+library(randomForest)
+library(glmnet)
+library(ggplot2)
+
+theme_set(theme_bw(base_size = 18))
+```
+
+## New data
+
+```{r message = FALSE}
+data <- readr::read_csv("//cc0pisilon.cc.nih.gov/Shares/OD/TBHD/Research Staff/Barb_Team/Leggio_Lorenzo_NIDA/RF_retention_LCKproject/DATA/For Alex/imputed_dataset_dec_24.csv")
+```
+
+## Features and outcome
+
+```{r}
+features <- c("NumberOfVisits", "PID", "TotalNum_AftercareEnrollments", "Previous_IP_Admissions", 
+"Subsequent_IP_Admissions", "Sex", "Age", "Race", "Ethnic_Group", 
+"YearsOfEducation", "HouseholdIncome", "Marital_Status", "Height", 
+"Weight", "Zip_Code", "TotalDrinks_90", "NoOfDrinkDays_90", "HeavyDrinkingDays_90", 
+"AvgDrinksPerDay_90", "HeavyDrinkingYears", "AgeFirstDrink", 
+"PACS_Day_05", "PACS_Day_12", "PACS_Day_19", "PSQI_Q9_SleepQuality", 
+"PSQI_Total", "Day_3_MAX", "Overall_MAX", "Average_MAX_CIWA", 
+"CPRS_BSA_Baseline", "CPRS_BSA_Day_09", "CPRS_BSA_Day_16", "CPRS_BSA_Day_23", 
+"CPRS_MADRS_Baseline", "CPRS_MADRS_Day_09", "CPRS_MADRS_Day_16", 
+"CPRS_MADRS_Day_23", "ADS_Score", "Audit_C_Score", "Audit_H_Score", 
+"Audit_D_Score", "Total_Audit_Score", "ObsessiveDrinkingSubscale", 
+"CompulsiveDrinkingSubscale", "OCDS_TotalScore", "PackYears", 
+"Symptoms_Highly_Consistent", "Attention", "Motor", "SelfControl", 
+"CognitiveComplexity", "Perseverance", "CognitiveInstability", 
+"AttentionalImpulsiveness", "MotorImpulsiveness", "NonplanningImpulsiveness", 
+"Urgency", "Premeditation", "Preseverance", "SensationSeeking", 
+"PositiveUrgency", "Physical_Aggr", "Verbal_Aggr", "Anger", "Hostility", 
+"Total_Aggr", "WishTeBeDead", "SuicidalThoughts", "SuicidalIdeation", 
+"SuicidalIdeationIntent", "SuicidalIdeationPlanIntent", "FrequencyOfIdeation", 
+"EngagedInNonSuicidal", "SuicidalBehavior", "TotalOfAttempts", 
+"EmotionalAbuse", "PhysicalAbuse", "SexualAbuse", "EmotionalNeglect", 
+"PhysicalNeglect", "CTQ_TotalScore", "MinimizationDenial", "ELS_Events", 
+"PSS_Total_Score", "STAIT_Score", "QOL_Rating", "Physical_Health", 
+"Psychological", "Social_Relationships", "Environment", "Full_IQ", 
+"RawVocabulary", "ScaledVocabulary", "RawMatrixReasoning", "ScaledMatrixReasoning", 
+"comboscid_cur_alch", "comboscid_past_alch", "age_onset_alch", 
+"comboscid_cur_AN", "comboscid_past_AN", "comboscid_cur_BN", 
+"comboscid_past_BN", "Handedness_Score", "NoRelatives", "NoRelativesAnswer4", 
+"FamilyHisDensity", "N_Factor", "E_Factor", "O_Factor", "A_Factor", 
+"C_Factor", "YFAS_SymptomCount", "NEGATIVE_EVENTS_SCORE", "POSITIVE_EVENTS_SCORE", 
+"Blood_Pressure_Diastolic", "Blood_Pressure_Systolic", "Heart_Rate_Pulse", 
+"Temperature", "Respiratory_Rate", "Breath_Alcohol", "Creatinine_D1", 
+"eGFR_AA_D1", "eGFR_NonAA_D1", "Glucose_D1", "Creatinine_D2", 
+"eGFR_AA_D2", "eGFR_NonAA_D2", "Glucose_D2", "ALT_D1", "AlkPhos_D1", 
+"AST_D1", "Bilirubin_Direct_D1", "Bilirubin_Total_D1", "ALT_D2", 
+"AlkPhos_D2", "AST_D2", "Bilirubin_Direct_D2", "Bilirubin_Total_D2", 
+"Albumin_D1", "Albumin_D2", "Creatine_Kinase_D1", "LDH_D1", "Uric_Acid_D1", 
+"Creatine_Kinase_D2", "LDH_D2", "Protein_Total_D2", "Uric_Acid_D2", 
+"GGT_D1", "GGT_D2", "Est_Average_Glucose_D2", "Hgb_A1C_D2", "Hematocrit_D1", 
+"Hemoglobin_D1", "Neutrophils_Abs_D1", "Neutrophils_Pcnt_D1", 
+"Hematocrit_D2", "Hemoglobin_D2", "Neutrophils_Abs_D2", "Neutrophils_Pcnt_D2", 
+"CRP_D2", "Sed_Rate_D2", "HepA_Screen_D1", "HepB_Screen_D1", 
+"HepC_Screen_D1", "HIV_Screen_D1", "RPR_Syphilis_Sero_D1", "Cholesterol_Total_D2", 
+"HDL_Cholesterol_D2", "LDL_Cholesterol_D2", "Triglycerides_D2", 
+"Ferritin_D2", "Iron_D2", "Pcnt_Saturation_D2", "Transferrin_D2", 
+"Vitamin_B12_D2", "Serum_Folate_D2", "PT_INR_D1", "PT_Auto_D1", 
+"PTT_Auto_D1", "TSH_D2", "Free_T3_D2", "UDS_Amphetamines_D1", 
+"UDS_Benzodiazepines_D1", "UDS_Cannabinoids_D1", "UDS_Cocaine_D1", 
+"UDS_Opiates_D1", "overall_comorbidity_score")
+
+out <- c("NumberOfVisits")
+```
+
+
+## Cleaning
+
+data = original new dataset from LK provided 12/20/24
+data_cleaned = with all the fixes described below applied
+data_cleaned_hhi = has a valued household income variable added (midpoint of income ranges)
+
+```{r}
+# old catvars
+catvars <- c("Sex", "Symptoms_Highly_Consistent", "WishTeBeDead", "SuicidalThoughts", "SuicidalIdeation", 
+  "SuicidalIdeationIntent", "SuicidalIdeationPlanIntent", "EngagedInNonSuicidal", 
+  "SuicidalBehavior", "comboscid_cur_alch", "comboscid_past_alch", "comboscid_cur_AN", 
+  "comboscid_past_AN", "comboscid_cur_BN", "comboscid_past_BN", "comboscid_cur_EDOS", 
+  "comboscid_past_EDOS", "Race", "Ethnic_Group", "HouseholdIncome", "Marital_Status", 
+  "FTND_SmokingStatus")
+
+current_cats <- which(sapply(data, is.character))
+
+curr_cats <- dput(names(data[,current_cats]))
+
+vars_to_fix <- setdiff(curr_cats, catvars)
+
+fix_less_than <- c("eGFR_AA_D1", "eGFR_NonAA_D1", "eGFR_AA_D2", "eGFR_NonAA_D2", 
+"ALT_D1", "Bilirubin_Direct_D1", "Bilirubin_Total_D1", "ALT_D2", 
+"Bilirubin_Direct_D2", "Bilirubin_Total_D2", "Est_Average_Glucose_D2", 
+"Hgb_A1C_D2", "CRP_D2", "Vitamin_B12_D2")
+
+data_cleaned <- data %>%
+  mutate(across(
+    any_of(fix_less_than),
+    ~ as.numeric(gsub("[\\<,]", "", .x)))) 
+
+# words in numeric vars will be NA
+fix_words <- c("Triglycerides_D2", "PT_INR_D1", "PT_Auto_D1", "PTT_Auto_D1")
+# convert words to numeric to factors
+# some weird case stuff (Negative vs NEGATIVE vs negative etc)
+fix_negpos <- c("HepA_Screen_D1", "HepB_Screen_D1", "HepC_Screen_D1", "HIV_Screen_D1", "RPR_Syphilis_Sero_D1", "UDS_Amphetamines_D1", "UDS_Benzodiazepines_D1", "UDS_Cannabinoids_D1", "UDS_Cocaine_D1", "UDS_Opiates_D1")
+
+data_cleaned <- data_cleaned %>%
+  mutate(across(
+    any_of(fix_words),
+    ~ as.numeric(.x)
+  )) %>%
+  mutate(across(
+    any_of(fix_negpos),
+    ~ tolower(.x)
+  )) %>% 
+  mutate(across(
+    any_of(fix_negpos),
+    ~ ifelse(.x == "negative", 0, .x))) %>%
+  mutate(across(
+    any_of(fix_negpos),
+    ~ ifelse(.x == "positive" | .x == "reactive", 1, .x))) 
+
+# # complete cases only (RF)
+# data_cleaned <- data_cleaned[complete.cases(data_cleaned[,c(out,features)]),c(out,features)]
+
+# drop variables that are the same for everyone
+# single_value_indices <- rep(NA, ncol(data))
+# 
+# for(i in 1:ncol(data)){
+#   single_value_indices[i] <- length(table(data[,i]))
+# }
+# 
+# drop_single_val_vars <- dput(names(data[,which(single_value_indices == 1)]))
+# 
+# data_cleaned <- data_cleaned %>%
+#   select(!any_of(drop_single_val_vars))
+
+# update catvars with new catvars
+
+catvars <- c("Sex", "Symptoms_Highly_Consistent", "WishTeBeDead", "SuicidalThoughts", "SuicidalIdeation", 
+  "SuicidalIdeationIntent", "SuicidalIdeationPlanIntent", "EngagedInNonSuicidal", 
+  "SuicidalBehavior", "comboscid_cur_alch", "comboscid_past_alch", "comboscid_cur_AN", 
+  "comboscid_past_AN", "comboscid_cur_BN", "comboscid_past_BN", "comboscid_cur_EDOS", 
+  "comboscid_past_EDOS", "Race", "Ethnic_Group", "HouseholdIncome", "Marital_Status", 
+  "FTND_SmokingStatus", fix_negpos)
+
+data_cleaned <- data_cleaned %>%
+  mutate(across(
+    any_of(catvars),
+    ~ as.factor(.x)
+  ))
+
+# drop high msgness 
+data_cleaned <- data_cleaned %>%
+   select(!starts_with("eGFR"))
+
+# sort(colSums(is.na(data_cleaned)))
+data_cleaned <- data_cleaned[complete.cases(data_cleaned), ]
+
+# household income
+# 1 = < $5000; 2 = $5000 - $9999; 3 = $10000 - $19999; 4 = $20000 - $29999; 5 = $30000 - $39999; 6 = $40000 - $49999; 7 = $50000 - $74999; 8 = $75000 - $100000; 9 = > $100000
+
+hhincome <- data.frame(HouseholdIncome = as.factor(c(1:9)),
+                       hhincome_value = c(2500, 7500, 15000, 25000, 35000, 45000, 62500, 87500, 100000))
+                       
+data_cleaned_hhi <- left_join(data_cleaned, hhincome, by = "HouseholdIncome")              
+```
+
+
+## Test/train split
+
+Plan: Use data_cleaned first; if hhi emerges again can use data_cleaned_hhi which has additional variable with the actual income amounts (midpoints)
+
+Complete cases: 117 observations 179 variables (or 180 w/ addl household income coding)
+
+```{r}
+smp_size <- floor(0.70 * nrow(data_cleaned))
+
+set.seed(20202)
+train_ind <- sample(seq_len(nrow(data_cleaned)), size = smp_size)
+df_training <- data_cleaned[train_ind, ]
+df_test <- data_cleaned[-train_ind, ]
+```
+
+## Scaling
+
+```{r}
+df_training <- df_training %>%
+   mutate(across(
+    where(is.numeric) & !any_of(c("NumberOfVisits", "PID")),
+    ~ scale(.x)))
+
+df_test <- df_test %>%
+   mutate(across(
+    where(is.numeric) & !any_of(c("NumberOfVisits", "PID")),
+    ~ scale(.x)))
+```
+
+# Random forest models
+
+### RF #1 - original HH income variable (categorical)
+
+```{r}
+set.seed(20202)
+rfx_e <- randomForest(df_training$NumberOfVisits ~ ., data = df_training[,3:ncol(df_training)], ntree = 1000)
+rfx_e
+
+# saveRDS(rfx_e, "output-ext/rfx_e.rds") # saved 3/11/25 along w varimp plot, rmse
+
+# RMSE test set
+pred_rfx_e <- predict(rfx_e, df_test[,3:ncol(df_test)])
+df_test$pred_rfx_e <- pred_rfx_e
+
+RF1_RMSE <- df_test %>%
+  rowwise() %>%
+  summarise(MSE = (NumberOfVisits - pred_rfx_e)**2) %>%
+  summarise(RMSE = sqrt(mean(MSE))) %>%
+  pull(RMSE)
+
+# importance
+vie <- data.frame(rfx_e$importance)
+vie$variable <- rownames(vie)
+
+ggplot(vie %>% filter(IncNodePurity >= quantile(vie$IncNodePurity, probs = .90)), 
+                      aes(x = IncNodePurity, y = forcats::fct_reorder(variable, IncNodePurity)))+
+  geom_point(size = 3) +
+  labs(x = "Variable importance", 
+       y = "") 
+
+ggsave("output-ext/RF1-varimp.png")
+```
+
+### RF #2 - both categorical HouseholdIncome & valued hhincome
+
+Repeat #1 with the _hhi dataset
+
+HouseholdIncome (categorical) remains important, but the valued hhi variable isn't
+Is this because HouseholdIncome still in the model?
+
+```{r}
+# indices already established
+df_training_hhi <- data_cleaned_hhi[train_ind, ]
+df_test_hhi <- data_cleaned_hhi[-train_ind, ]
+
+df_training_hhi <- df_training_hhi %>%
+   mutate(across(
+    where(is.numeric) & !any_of(c("NumberOfVisits", "PID")),
+    ~ scale(.x)))
+
+df_test_hhi <- df_test_hhi %>%
+   mutate(across(
+    where(is.numeric) & !any_of(c("NumberOfVisits", "PID")),
+    ~ scale(.x)))
+
+set.seed(20202)
+rfx_e_hhi <- randomForest(df_training_hhi$NumberOfVisits ~ ., data = df_training_hhi[,3:ncol(df_training_hhi)], ntree = 1000)
+
+# saveRDS(rfx_e_hhi, "output-ext/rfx_e_hhi.rds") # 3/11/25 save
+
+# RMSE test set
+pred_rfx_e_hhi <- predict(rfx_e_hhi, df_test_hhi[,3:ncol(df_test_hhi)])
+df_test_hhi$pred_rfx_e_hhi <- pred_rfx_e_hhi
+
+RF2_RMSE <- df_test_hhi %>%
+  rowwise() %>%
+  summarise(MSE = (NumberOfVisits - pred_rfx_e_hhi)**2) %>%
+  summarise(RMSE = sqrt(mean(MSE))) %>%
+  pull(RMSE)
+
+# importance
+rfx_e_hhi$importance
+
+# importance
+vie_hhi <- data.frame(rfx_e_hhi$importance)
+vie_hhi$variable <- rownames(vie_hhi)
+
+ggplot(vie_hhi %>% filter(IncNodePurity >= quantile(vie_hhi$IncNodePurity, probs = .90)), 
+                      aes(x = IncNodePurity, y = forcats::fct_reorder(variable, IncNodePurity)))+
+  geom_point(size = 3) +
+  labs(x = "Variable importance", 
+       y = "") 
+
+ggsave("output-ext/RF2-varimp.png")
+```
+
+### RF #3 - only valued hhincome in model
+
+hhincome_value slightly increases in importance when categorical HouseholdIncome is dropped, but is still very low importance (~3)
+
+```{r}
+data_cleaned_hhi2 <- data_cleaned_hhi %>%
+  select(!HouseholdIncome)
+
+# indices already established
+df_training_hhi2 <- data_cleaned_hhi2[train_ind, ]
+df_test_hhi2 <- data_cleaned_hhi2[-train_ind, ]
+
+df_training_hhi2 <- df_training_hhi2 %>%
+   mutate(across(
+    where(is.numeric) & !any_of(c("NumberOfVisits", "PID")),
+    ~ scale(.x)))
+
+df_test_hhi2 <- df_test_hhi2 %>%
+   mutate(across(
+    where(is.numeric) & !any_of(c("NumberOfVisits", "PID")),
+    ~ scale(.x)))
+
+set.seed(20202)
+rfx_e_hhi2 <- randomForest(df_training_hhi2$NumberOfVisits ~ ., data = df_training_hhi2[,3:ncol(df_training_hhi2)], ntree = 1000)
+
+# saveRDS(rfx_e_hhi2, "output-ext/rfx_e_hhi2.rds") # 3/11/25
+
+# RMSE test set
+pred_rfx_e_hhi2 <- predict(rfx_e_hhi2, df_test_hhi2[,3:ncol(df_test_hhi2)])
+df_test_hhi2$pred_rfx_e_hhi2 <- pred_rfx_e_hhi2
+
+RF3_RMSE <- df_test_hhi2 %>%
+  rowwise() %>%
+  summarise(MSE = (NumberOfVisits - pred_rfx_e_hhi2)**2) %>%
+  summarise(RMSE = sqrt(mean(MSE))) %>%
+  pull(RMSE)
+
+# importance
+vie_hhi2 <- data.frame(rfx_e_hhi2$importance)
+vie_hhi2$variable <- rownames(vie_hhi2)
+
+ggplot(vie_hhi2 %>% filter(IncNodePurity >= quantile(vie_hhi2$IncNodePurity, probs = .90)), 
+                      aes(x = IncNodePurity, y = forcats::fct_reorder(variable, IncNodePurity)))+
+  geom_point(size = 3) +
+  labs(x = "Variable importance", 
+       y = "") 
+
+ggsave("output-ext/RF3-varimp.png")
+```
+
+```{r}
+data %>%
+  ggplot(aes(x = NumberOfVisits, y = Free_T3_D2))+
+  geom_point()
+```
+
+## LASSO
+
+```{r}
+xL <- as.matrix(data_cleaned[ , 3:ncol(data_cleaned)])
+yL <- as.matrix(data_cleaned[ , 1])
+  
+set.seed(23569)
+cvmod <- cv.glmnet(xL, yL, family = "poisson")
+plot(cvmod)
+lam <- cvmod$lambda.min
+
+lasso_exp <- glmnet(xL, yL, lambda = lam, family = "poisson")
+# saveRDS(lasso_exp, "output-ext/lasso-exp.rds")
+lasso_exp$beta
+
+outcome <- coef(lasso_exp)
+outcome[outcome[,1]!=0,]
+exp(outcome[outcome[,1]!=0,])
+```
+
+## Directionality (Poisson reg)
+
+Poisson regression with RF#3 important variables
+
+Use top 90th percentile variables
+
+```{r}
+top90vars <- vie_hhi2 %>% 
+  filter(IncNodePurity >= quantile(vie$IncNodePurity, probs = .90)) %>%
+  pull(variable)
+
+paste(top90vars, collapse = " + ") # model terms
+
+# dropped avg drinks day 90 (colinear w total drinks 90)
+
+pois_mod_exp <- glm(NumberOfVisits ~ TotalDrinks_90 + HeavyDrinkingDays_90 + CPRS_MADRS_Baseline + CPRS_MADRS_Day_09 + ADS_Score + SensationSeeking + PositiveUrgency + N_Factor + E_Factor + POSITIVE_EVENTS_SCORE + Blood_Pressure_Diastolic + Hemoglobin_D1 + Hematocrit_D2 + Hemoglobin_D2 + CRP_D2 + Triglycerides_D2 + Vitamin_B12_D2 + Serum_Folate_D2 + TSH_D2 + Free_T3_D2, family = "poisson", data = data_cleaned)
+summary(pois_mod_exp)
+
+#saveRDS(pois_mod_exp, "output-ext/pois_mod_exp.rds")
+
+broom::tidy(pois_mod_exp) %>%
+  mutate(exp_estimate = signif(exp(estimate), 3),
+         std.error = signif(std.error, 3),
+         statistic = signif(statistic, 3),
+         p.value = signif(p.value, 3),
+         direction = ifelse(estimate > 0, "up", "down"),
+         p.sig = ifelse(p.value < 0.05, "*", "ns"))%>%
+  relocate(term, estimate, exp_estimate) %>%
+ # filter(p.value < 0.05) %>%
+  write.csv("output-ext/pois_reg_RF_ext_vars_model_table_full.csv")
+
+# save.image("workspace-3-13-25.RData")
+```
+
+
+
